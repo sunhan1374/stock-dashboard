@@ -50,12 +50,13 @@ async function rss(q, hl, gl, ceid, n) {
     return { t, s: `${src} · ${fmtTime(g('pubDate'))}`, u: g('link') };
   });
 }
-// 네이버 검색 API (환경변수 NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 필요, 없으면 건너뜀)
+// 네이버 검색 API — NAVER API HUB(NCP) 방식. 환경변수 NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 필요, 없으면 건너뜀
+// 구 방식(openapi.naver.com, X-Naver-Client-Id)은 2026-07-31부로 신규 발급이 막혀 이 방식으로 교체함
 async function naver(q) {
   const { NAVER_CLIENT_ID: i, NAVER_CLIENT_SECRET: k } = process.env;
   if (!i || !k) return [];
-  const r = await fetch(`https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(q)}&display=10&sort=date`,
-    { headers: { 'X-Naver-Client-Id': i, 'X-Naver-Client-Secret': k } });
+  const r = await fetch(`https://naverapihub.apigw.ntruss.com/search/v1/news?query=${encodeURIComponent(q)}&display=10&sort=date`,
+    { headers: { 'X-NCP-APIGW-API-KEY-ID': i, 'X-NCP-APIGW-API-KEY': k } });
   if (!r.ok) return [];
   return (await r.json()).items.map(x => ({
     t: clean(x.title), u: x.link,
