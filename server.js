@@ -54,14 +54,20 @@ async function rss(q, hl, gl, ceid, n) {
 // 구 방식(openapi.naver.com, X-Naver-Client-Id)은 2026-07-31부로 신규 발급이 막혀 이 방식으로 교체함
 async function naver(q) {
   const { NAVER_CLIENT_ID: i, NAVER_CLIENT_SECRET: k } = process.env;
-  if (!i || !k) return [];
-  const r = await fetch(`https://naverapihub.apigw.ntruss.com/search/v1/news?query=${encodeURIComponent(q)}&display=10&sort=date`,
-    { headers: { 'X-NCP-APIGW-API-KEY-ID': i, 'X-NCP-APIGW-API-KEY': k } });
-  if (!r.ok) return [];
-  return (await r.json()).items.map(x => ({
-    t: clean(x.title), u: x.link,
-    s: `${new URL(x.originallink || x.link).hostname.replace(/^www\./, '')} · ${fmtTime(x.pubDate)}`,
-  }));
+  if (!i || !k) return { items: [], status: 'no-key' };
+  try {
+    const r = await fetch(`https://naverapihub.apigw.ntruss.com/search/v1/news?query=${encodeURIComponent(q)}&display=10&sort=date`,
+      { headers: { 'X-NCP-APIGW-API-KEY-ID': i, 'X-NCP-APIGW-API-KEY': k } });
+    const body = await r.text();
+    if (!r.ok) return { items: [], status: r.status, body: body.slice(0, 300) };
+    const j = JSON.parse(body);
+    return {
+      items: (j.items || []).map(x => ({
+        t: clean(x.title), u: x.link,
+        s: `${new URL(x.originallink || x.link).hostname.replace(/^www\./, '')} · ${fmtTime(x.pubDate)}`,
+      })), status: 200,
+    };
+  } catch (e) { return { items: [], status: 'error', body: String(e.message).slice(0, 300) }; }
 }
 // Claude API로 증시 영향도 기준 선정 (환경변수 ANTHROPIC_API_KEY 필요, 없거나 실패하면 앞의 3건)
 async function pick(items, scope) {
@@ -91,15 +97,20 @@ ${list}` }],
 }
 const uniq = a => { const s = new Set(); return a.filter(x => { const k = x.t.slice(0, 18); if (s.has(k)) return false; s.add(k); return true; }); };
 const news = async () => {
-  const [kn, kg, us] = await Promise.all([
-    Promise.all(['코스피', '증시 전망', '환율 금리'].map(naver)).then(a => a.flat()).catch(() => []),
+  const [naverResults, kg, us] = await Promise.all([
+    Promise.all(['코스피', '증시 전망', '환율 금리'].map(naver)),
     rss('코스피 OR 증시 OR 환율 OR 금리 when:1d', 'ko', 'KR', 'KR:ko', 15),
     rss('stock market OR Wall Street OR Fed OR Nasdaq when:1d', 'en-US', 'US', 'US:en', 15),
   ]);
+  const kn = naverResults.flatMap(r => r.items);
   return {
     kr: await pick(uniq([...kn, ...kg]).slice(0, 30), '국내'),
     us: await pick(uniq(us), '해외'),
-    _debug: { naverKeySet: !!(process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET), naverItemCount: kn.length, googleKrItemCount: kg.length },
+    _debug: {
+      naverKeySet: !!(process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET),
+      naverItemCount: kn.length, googleKrItemCount: kg.length,
+      naverStatuses: naverResults.map(r => ({ status: r.status, body: r.body })),
+    },
   };
 };
 
