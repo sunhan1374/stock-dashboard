@@ -96,7 +96,11 @@ const news = async () => {
     rss('코스피 OR 증시 OR 환율 OR 금리 when:1d', 'ko', 'KR', 'KR:ko', 15),
     rss('stock market OR Wall Street OR Fed OR Nasdaq when:1d', 'en-US', 'US', 'US:en', 15),
   ]);
-  return { kr: await pick(uniq([...kn, ...kg]).slice(0, 30), '국내'), us: await pick(uniq(us), '해외') };
+  return {
+    kr: await pick(uniq([...kn, ...kg]).slice(0, 30), '국내'),
+    us: await pick(uniq(us), '해외'),
+    _debug: { naverKeySet: !!(process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET), naverItemCount: kn.length, googleKrItemCount: kg.length },
+  };
 };
 
 http.createServer(async (req, res) => {
